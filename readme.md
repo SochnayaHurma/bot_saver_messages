@@ -18,7 +18,7 @@
 
 #### Запросы
 Логику получения данных из api поделим на несколько частей
-1. Data. Вывод чистых строчек с базы данных
+##### 1. Data. Вывод чистых строчек с базы данных
 
 - Сборщика данных назовем MessageManager, который в конструкторе будет выполнять подключение к бд
 (без обработки ошибок)
@@ -52,7 +52,7 @@ class MessageManager:
         return await self.collection.count_documents(kwargs)
 
 ```
-2. Service. Выполнение безнес логики и преобразование в схемы
+##### 2. Service. Выполнение безнес логики и преобразование в схемы
 - Бизнес логику у нас будет осуществлять класс MessageService
 - Принимать в аргументы источник данных(хорошо бы иметь как тип базовый класс для независимости от источника)
 ```python
@@ -80,7 +80,7 @@ class MessageService:
             for row in await self.db.all(pages.get('skip'), pages.get('limit'))
         ]
         return ListMessagesOut(
-            current_page=page,
+            current_page=pages.get('current_page'),
             limit=pages.get('limit'),
             last_page=pages.get('last_page'),
             messages=messages
@@ -94,7 +94,7 @@ class MessageService:
         )
 
 ```
-3. Dependency. Сбор зависимостей связанных с web и делегирование слою service
+##### 3. Dependency. Сбор зависимостей связанных с web и делегирование слою service
 - Сбор зависимостей с пользовательского запроса
 - get_message_service не так уж обязателен, но если проект сделать посерьезней нам
 необходимы будут обработки ошибок подключений retry или альтернативный источник данных
@@ -274,6 +274,7 @@ def paginate(
 #### ├── main.py точка входа бота
 #### ├── service.py бизнес логика запросов
 #### ├── config.py конфигурация бота
+#### ├── utils.py вспомогательные функции
 
 Точка входа `main.py`
 - Занимается инициализацией дополнительных модулей и запуском экземпляра бота
@@ -311,7 +312,6 @@ if __name__ == "__main__":
 модуль `api-client.py`
 - Осуществляет запросы к нашему API базовый адрес, который задается в конфигурации
 ```python
-import os
 from datetime import datetime
 
 from httpx import AsyncClient
@@ -356,7 +356,8 @@ from typing import TypeAlias
 from aiogram import html
 
 
-template = 'Имя:{name}\nСообщение:{text}\nДата:{date}\n\n'
+template = 'Имя:{name}\nСообщение:{text}\nДата:{date}'
+line = '─' * 32
 
 Message: TypeAlias = dict[str, str]
 
@@ -364,7 +365,7 @@ Message: TypeAlias = dict[str, str]
 def format_messages(messages: list[Message]) -> str:
     if not messages:
         return html.bold('Сообщений пока нет :(')
-    return '\n\n'.join(
+    return f'\n{line}\n'.join(
         template.format(
             name=html.bold(message.get('name')),
             text=html.blockquote(message.get('message')),
@@ -372,6 +373,11 @@ def format_messages(messages: list[Message]) -> str:
         )
         for message in messages[::-1]
     )
+
+
+def format_response(response: str, current_page: int, last_page: int) -> str:
+    pagination_info = html.bold(f'Страница: {current_page} из {last_page}')
+    return f'{response}\n{pagination_info}'
 
 ```
 
@@ -387,29 +393,28 @@ def format_messages(messages: list[Message]) -> str:
 - Запрос на создание сообщения
 1. Очистку кэша
 2. Отправка запроса на сохранение сообщения
+
+модуль `service.py`
 ```python
 from aiogram.fsm.context import FSMContext
 
 from api_client import fetch_page_messages, fetch_create_message
+from formaters import format_response
+from utils import get_next_page
 
 
 async def get_messages_to_page(state: FSMContext, action: str = 'default'):
     cache = await state.get_data()
-    current_page = cache.get('current_page', 1)
-    match action:
-        case 'up':
-            current_page += 1
-        case 'down' if current_page > 1:
-            current_page -= 1
-        case _:
-            current_page = 1
+    previous_page = cache.get('current_page', 1)
+    current_page = get_next_page(previous_page, action)
     cache_messages = cache.get(f'message:{current_page}')
     if cache_messages:
         await state.update_data({'current_page': current_page})
         return cache_messages
 
     response = await fetch_page_messages(current_page)
-    messages = response.pop('messages')
+    current_page, last_page = response.get("current_page", 1), response.get("last_page", 1)
+    messages = format_response(response.pop('messages'), current_page, last_page)
     await state.update_data({
         **response,
         f'message:{current_page}': messages}
@@ -420,6 +425,7 @@ async def get_messages_to_page(state: FSMContext, action: str = 'default'):
 async def create_message(name, message, date, state: FSMContext):
     await state.clear()
     await fetch_create_message(name, message, date)
+
 ```
 
 #### Запрос будущих страниц
