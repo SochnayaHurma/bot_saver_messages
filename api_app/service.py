@@ -22,7 +22,7 @@ class MessageService:
             for row in await self.db.all(pages.get('skip'), pages.get('limit'))
         ]
         return ListMessagesOut(
-            current_page=page,
+            current_page=pages.get('current_page'),
             limit=pages.get('limit'),
             last_page=pages.get('last_page'),
             messages=messages
