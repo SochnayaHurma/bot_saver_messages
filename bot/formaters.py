@@ -20,3 +20,8 @@ def format_messages(messages: list[Message]) -> str:
         )
         for message in messages[::-1]
     )
+
+
+def format_response(response: str, current_page: int, last_page: int) -> str:
+    pagination_info = html.bold(f'Страница: {current_page} из {last_page}')
+    return f'{response}\n{pagination_info}'
