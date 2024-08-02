@@ -1,0 +1,48 @@
+services:
+  nginx:
+    image: nginx
+    ports:
+      - 80:80
+    volumes:
+      - "./docker/nginx/template:/etc/nginx/templates:ro"
+      - "./docker/nginx/socket/:/tmp/socket:rw"
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    ports:
+      - 8000:8000
+    env_file:
+      - ./.env.test
+    volumes:
+      - "./docker/nginx/socket:/tmp/socket:rw"
+  bot:
+    build:
+      context: .
+      dockerfile: ./docker/bot/Dockerfile
+    env_file:
+      - ./.env.test
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    env_file: './.env.test'
+  redis:
+    build:
+      dockerfile: './docker/redis/Dockerfile'
+    env_file: './.env.test'
+    command: >
+      sh -c '
+        mkdir -p /usr/local/etc/redis &&
+        echo "bind 0.0.0.0" > /usr/local/etc/redis/redis.conf &&
+        echo "requirepass $REDIS_PASSWORD" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendonly yes" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendfsync everysec" >> /usr/local/etc/redis/redis.conf &&
+        echo "user default on nopass ~* +@all" > /usr/local/etc/redis/users.acl &&
+        echo "user $REDIS_USER on >$REDIS_USER_PASSWORD ~* +@all" >> /usr/local/etc/redis/users.acl &&
+        redis-server /usr/local/etc/redis/redis.conf --aclfile /usr/local/etc/redis/users.acl
+      '
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
