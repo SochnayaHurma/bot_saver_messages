@@ -3,6 +3,7 @@ services:
     image: nginx
     ports:
       - 80:80
+      - 443:443
     volumes:
       - "./docker/nginx/template:/etc/nginx/templates:ro"
       - "./docker/nginx/socket/:/tmp/socket:rw"
@@ -10,8 +11,6 @@ services:
     build:
       context: .
       dockerfile: ./docker/api/Dockerfile
-    ports:
-      - 8000:8000
     env_file:
       - ./.env.test
     volumes:

@@ -16,7 +16,7 @@
 
 #### Запросы
 Логику получения данных из api поделим на несколько частей
-1. data Вывод чистых строчек с базы данных
+1. Data. Вывод чистых строчек с базы данных
 
 - Сборщика данных назовем MessageManager, который в конструкторе будет выполнять подключение к бд
 (без обработки ошибок)
@@ -50,7 +50,7 @@ class MessageManager:
         return await self.collection.count_documents(kwargs)
 
 ```
-2. service Выполнение безнес логики и преобразование в схемы
+2. Service. Выполнение безнес логики и преобразование в схемы
 - Бизнес логику у нас будет осуществлять класс MessageService
 - Принимать в аргументы источник данных(хорошо бы иметь как тип базовый класс для независимости от источника)
 ```python
@@ -92,11 +92,13 @@ class MessageService:
         )
 
 ```
-3. dependency Сбор зависимостей связанных с web и делегирование слою service
+3. Dependency. Сбор зависимостей связанных с web и делегирование слою service
 - Сбор зависимостей с пользовательского запроса
 - get_message_service не так уж обязателен, но если проект сделать посерьезней нам
 необходимы будут обработки ошибок подключений retry или альтернативный источник данных
   (можно заменить lifespan)
+
+модуль `api/v1/dependencies.py`
 ```python
 from typing import Any
 
@@ -131,6 +133,9 @@ async def create_message(
 - Схема для ввода(создания) записи мы будем использовать модель MessageIn
 - Схема для вывода записей мы будем использщовать MessageOut
 - Схема содержающая текущую страницу, последнюю страницу и список сообщений
+
+
+модуль `models.py`
 ```python
 from pydantic import BaseModel
 
@@ -155,6 +160,8 @@ class ListMessagesOut(BaseModel):
 #### Маршруты
 - От первого(GET) маршрута ожидаем стандартный ответ 200 по схеме ListMessagesOut
 - От второго(POST) маршрута ожидаем статус 201_Created сигнализирующее о успешном создании сущности
+
+модуль `routers/message.py`
 ```python
 from fastapi import APIRouter, Depends, status
 
@@ -188,6 +195,8 @@ async def save_message(_=Depends(create_message)):
 `poetry add pydantic_settings`
 
 - Разделим на кусочки наши конфигурации для легкой тестируемости
+
+модуль `config.py`
 ```python
 from pydantic_settings import BaseSettings
 
@@ -223,6 +232,8 @@ settings = Settings()
 последней
 2. Если последняя страница это первая, то мы назначаем текущую страницу первой
 и количество записей, которые нужно пропустить обнуляем
+
+модуль `utils.py`
 ```python
 import math
 
@@ -427,8 +438,10 @@ def paginate_buttons():
 
 ```
 # Объединяем кусочки в комок 
-
-
+#### nginx
+- Монтируем базовые конфигурации из папки templates
+- Монтируем директорию, где будут хранится сокеты gunicorn 
+- Пробрасываем порт 80 443
 
 ```yaml
 services:
@@ -436,31 +449,56 @@ services:
     image: nginx
     ports:
       - 80:80
+      - 443:443
     volumes:
       - "./docker/nginx/template:/etc/nginx/templates:ro"
       - "./docker/nginx/socket/:/tmp/socket:rw"
+```
+
+#### api
+
+- Переменные среды берем из файла .env
+- Монтируем директорию для сокетов чтобы пробросить их nginx
+```yaml
   api:
     build:
       context: .
       dockerfile: ./docker/api/Dockerfile
-    ports:
-      - 8000:8000
     env_file:
       - ./.env
     volumes:
       - "./docker/nginx/socket:/tmp/socket:rw"
+```
+
+#### bot 
+- Указываем переменные среды
+```yaml
   bot:
     build:
       context: .
       dockerfile: ./docker/bot/Dockerfile
     env_file:
       - ./.env
+```
+#### MongoDB
+- Пробрасываем порт 27017
+- Указываем переменные среды 
+
+```yaml
   mongo:
     image: mongo
     restart: always
     ports:
       - 27017:27017
     env_file: './.env'
+```
+#### Redis 
+- Указываем переменные среды
+- При старте задаем sh скрипт, который:
+1. Создает директорию для redis.conf
+2. Заполняет redis.conf базовыми конфигурациями 
+3. "Регистрирует нового пользователя" с указанными данными из переменных среды
+```yaml
   redis:
     build:
       dockerfile: './docker/redis/Dockerfile'
