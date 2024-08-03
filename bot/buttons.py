@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 
 
 def paginate_buttons():
@@ -8,3 +8,7 @@ def paginate_buttons():
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=kb_list)
     return keyboard
+
+
+def menu_commands():
+    return [BotCommand(command='/get_messages', description='Возвращает последние 10 сообщений')]

@@ -1,5 +1,5 @@
-from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram import F, Router, html
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -11,6 +11,14 @@ router = Router()
 
 
 @router.message(CommandStart())
+async def start(message: Message) -> None:
+    welcome = html.bold('Бот запоминалкин приветствует Вас!')
+    await message.answer(
+        f'{welcome}\n{html.spoiler("я слежу за тобой")}'
+    )
+
+
+@router.message(Command('get_messages'))
 async def command_start_handler(message: Message, state: FSMContext) -> None:
     messages = await get_messages_to_page(state)
     await message.answer(messages, reply_markup=paginate_buttons())
